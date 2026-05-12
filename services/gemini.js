@@ -1,10 +1,16 @@
-import { GoogleGenAI } from '@google/genai';
+import { GoogleGenerativeAI } from "@google/generative-ai";
 import dotenv from 'dotenv';
 dotenv.config();
 
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
 export async function analyzeTranscript(transcriptData) {
+    // 2026 ရဲ့ နောက်ဆုံးထွက် 2.5 flash version ကို တိုက်ရိုက်သုံးထားပါတယ်
+    const model = genAI.getGenerativeModel({ 
+        model: "gemini-2.5-flash", 
+        generationConfig: { responseMimeType: "application/json" }
+    });
+
     const prompt = `
     You are an expert viral TikTok reel director. 
     Analyze this transcript: ${JSON.stringify(transcriptData)}
@@ -24,14 +30,14 @@ export async function analyzeTranscript(transcriptData) {
     Make sure scenes align with natural sentence breaks. Optimize keywords for visually striking B-roll.
     `;
 
-    const response = await ai.models.generateContent({
-        model: 'gemini-2.5-flash',
-        contents: prompt,
-        config: {
-            responseMimeType: 'application/json',
-        }
-    });
-
-    return JSON.parse(response.text);
+    try {
+        const result = await model.generateContent(prompt);
+        const response = await result.response;
+        return JSON.parse(response.text());
+    } catch (error) {
+        console.error("Gemini AI Error:", error);
+        throw error;
+    }
 }
+
 
