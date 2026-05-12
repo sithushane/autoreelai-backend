@@ -1,0 +1,5 @@
+cd backend
+npm init -y
+npm install express cors multer fluent-ffmpeg @google/genai axios dotenv
+npm install -g nodemon
+pip install faster-whisper
