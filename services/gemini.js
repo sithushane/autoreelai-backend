@@ -26,10 +26,10 @@ export async function analyzeTranscript(transcriptData) {
                 "Content-Type": "application/json"
             },
             body: JSON.stringify({
-                // အစ်ကို လိုချင်တဲ့ Gemini 2.5 Flash ကို OpenRouter ကနေ ခေါ်သုံးထားပါတယ်
                 "model": "google/gemini-2.5-flash", 
                 "messages": [{ "role": "user", "content": prompt }],
-                "response_format": { "type": "json_object" }
+                "response_format": { "type": "json_object" },
+                "max_tokens": 8000 // <--- ဒီမှာ ၈၀၀၀ လို့ ပြင်ပေးလိုက်ပါပြီ
             })
         });
 
@@ -47,5 +47,3 @@ export async function analyzeTranscript(transcriptData) {
         throw error;
     }
 }
-
-
