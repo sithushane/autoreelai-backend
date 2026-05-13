@@ -25,16 +25,20 @@ export async function renderReel(audioPath, scenes, musicPath, outputPath) {
             let filterChain = '';
             let inputCount = 0;
 
+            // 1. Video Filters (Newline အကုန်ဖြုတ်ထားပါတယ်)
             scenes.forEach((scene, index) => {
                 command.input(scene.localVideoPath);
                 const duration = scene.end - scene.start;
-                filterChain += `[${inputCount}:v]scale=480:854:force_original_aspect_ratio=increase,crop=480:854,setsar=1,fps=24,format=yuv420p,trim=duration=${duration},setpts=PTS-STARTPTS[v${index}];\n`;
+                // အနောက်ဆုံးမှာ ; ပါပြီးသားမို့လို့ နောက်တစ်ကြောင်းနဲ့ ဆက်လို့ရပါတယ်
+                filterChain += `[${inputCount}:v]scale=480:854:force_original_aspect_ratio=increase,crop=480:854,setsar=1,fps=24,format=yuv420p,trim=duration=${duration},setpts=PTS-STARTPTS[v${index}];`;
                 inputCount++;
             });
 
+            // 2. Concat Videos (အနောက်မှာ ; မပါပါဘူး)
             const concatInputs = scenes.map((_, i) => `[v${i}]`).join('');
-            filterChain += `${concatInputs}concat=n=${scenes.length}:v=1:a=0[baseV];\n`;
+            filterChain += `${concatInputs}concat=n=${scenes.length}:v=1:a=0[baseV]`;
 
+            // 3. Audio Inputs
             command.input(audioPath); 
             const voiceIdx = inputCount;
             inputCount++;
@@ -42,15 +46,20 @@ export async function renderReel(audioPath, scenes, musicPath, outputPath) {
             command.input(localMusicPath); 
             const musicIdx = inputCount;
             
-            filterChain += `[${musicIdx}:a]volume=0.2[bgm];[${voiceIdx}:a][bgm]amix=inputs=2:duration=first:dropout_transition=2[audioOut];\n`;
+            // 4. Audio Filters (အပေါ်က [baseV] နောက်ကနေ ဆက်မှာမို့လို့ ; နဲ့ စထားပါတယ်၊ အဆုံးမှာ ; မပါပါဘူး)
+            filterChain += `;[${musicIdx}:a]volume=0.2[bgm];[${voiceIdx}:a][bgm]amix=inputs=2:duration=first:dropout_transition=2[audioOut]`;
 
-            // မြန်မာဖောင့် မရှိလို့ Hang နေတဲ့ Subtitle အဆင့်ကို ခဏ ပိတ်ထားလိုက်ပါပြီ
-            // filterChain += `[baseV]subtitles='${safeSrtPath}'...[finalV]`;
+            // Subtitle အဆင့်ကို လောလောဆယ် ဖြုတ်ထားပါတယ်
+
+            // Filter Chain ကြီးကို အတိအကျ မြင်ရအောင် Log ထုတ်ပါမယ်
+            console.log("================ FILTER CHAIN ==================");
+            console.log(filterChain);
+            console.log("=================================================");
 
             command
                 .complexFilter(filterChain)
                 .outputOptions([
-                    '-map [baseV]',     // finalV အစား မူလ baseV ကိုပဲ တိုက်ရိုက်ယူပါမယ်
+                    '-map [baseV]',
                     '-map [audioOut]',
                     '-c:v libx264',
                     '-preset veryfast', 
@@ -61,10 +70,15 @@ export async function renderReel(audioPath, scenes, musicPath, outputPath) {
                     '-shortest'
                 ])
                 .output(outputPath)
-                .on('start', () => console.log('FFmpeg Process Started successfully.'))
+                .on('start', (cmd) => {
+                    // အစ်ကိုပြောတဲ့အတိုင်း FFmpeg Command အတိအကျကို Log ထုတ်ပါမယ်
+                    console.log("FFmpeg CMD:", cmd);
+                    console.log('FFmpeg Process Started successfully.');
+                })
                 .on('stderr', (line) => {
-                    // Log တွေ အရမ်းရှည်မနေအောင် error တချို့ကိုပဲ ပြခိုင်းထားပါတယ်
-                    if(line.includes('Error') || line.includes('Failed')) console.log("FFmpeg Output:", line);
+                    if(line.includes('Error') || line.includes('Failed') || line.includes('Invalid')) {
+                        console.log("FFmpeg Output:", line);
+                    }
                 })
                 .on('progress', (progress) => console.log(`Processing: ${progress.timemark} done...`))
                 .on('end', () => {
