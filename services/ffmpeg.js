@@ -12,8 +12,8 @@ export async function renderReel(audioPath, scenes, musicPath, outputPath) {
         scenes.forEach((scene, index) => {
             command.input(scene.videoPath);
             const duration = scene.end - scene.start;
-            // RAM သက်သာအောင် 1080p အစား 720p (720x1280) နဲ့ fps=24 ကို ပြောင်းထားပါတယ်
-            filterChain += `[${inputCount}:v]scale=-1:1280,crop=720:1280,setsar=1,fps=24,format=yuv420p,trim=duration=${duration},setpts=PTS-STARTPTS[v${index}];`;
+            // RAM လုံးဝမစားအောင် 480p (480x854) ကို ပြောင်းထားပါတယ်
+            filterChain += `[${inputCount}:v]scale=-1:854,crop=480:854,setsar=1,fps=24,format=yuv420p,trim=duration=${duration},setpts=PTS-STARTPTS[v${index}];`;
             inputCount++;
         });
 
@@ -29,15 +29,14 @@ export async function renderReel(audioPath, scenes, musicPath, outputPath) {
         command.input(musicPath); // Input [inputCount]
         const musicIdx = inputCount;
         
-        // Ducking: Lower BGM volume when voice is speaking
         filterChain += `[${musicIdx}:a]volume=0.2[bgm];[${voiceIdx}:a][bgm]amix=inputs=2:duration=first:dropout_transition=2[audioOut];`;
 
-        // 3. Burn Subtitles (TikTok Style)
+        // 3. Burn Subtitles
         const srtPath = path.join(process.cwd(), 'renders', `temp_${Date.now()}.srt`);
         generateSRT(scenes, srtPath);
         
-        // Subtitle size adjusted for 720p (Fontsize ကို 24 ကနေ 18 သို့လျှော့ထားသည်)
-        filterChain += `[baseV]subtitles=${srtPath}:force_style='Fontname=Arial,Fontsize=18,PrimaryColour=&H0000FFFF,OutlineColour=&H00000000,BorderStyle=1,Outline=2,Alignment=2,MarginV=20'[finalV]`;
+        // 480p နဲ့ ကိုက်ညီအောင် စာလုံးအရွယ်အစား (Fontsize) ကို 16 သို့ လျှော့ထားပါတယ်
+        filterChain += `[baseV]subtitles=${srtPath}:force_style='Fontname=Arial,Fontsize=16,PrimaryColour=&H0000FFFF,OutlineColour=&H00000000,BorderStyle=1,Outline=2,Alignment=2,MarginV=15'[finalV]`;
 
         command
             .complexFilter(filterChain)
@@ -45,16 +44,16 @@ export async function renderReel(audioPath, scenes, musicPath, outputPath) {
                 '-map [finalV]',
                 '-map [audioOut]',
                 '-c:v libx264',
-                '-preset ultrafast', // RAM သုံးစွဲမှု အနည်းဆုံးဖြစ်အောင် ultrafast ကို ပြောင်းထားပါတယ်
-                '-crf 28',           // Quality နည်းနည်းလျှော့ပြီး Size သေးအောင်
+                '-preset ultrafast', 
+                '-crf 30',           // Size အသေးဆုံးဖြစ်အောင်
                 '-c:a aac',
                 '-b:a 128k',
-                '-threads 2',        // Render စက် Crash မဖြစ်အောင် CPU Thread ကို ၂ ခုပဲ သုံးခိုင်းထားပါတယ်
+                '-threads 1',        // RAM မလောက်လို့ CPU Thread ကို (၁) ခုတည်း အသေချခိုင်းထားပါတယ်
                 '-shortest'
             ])
             .output(outputPath)
             .on('end', () => {
-                fs.unlinkSync(srtPath); // Cleanup
+                fs.unlinkSync(srtPath);
                 resolve(outputPath);
             })
             .on('error', reject)
