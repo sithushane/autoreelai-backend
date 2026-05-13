@@ -18,11 +18,23 @@ export async function fetchStockVideo(keyword) {
         if (data.videos && data.videos.length > 0) {
             const randomVideo = data.videos[Math.floor(Math.random() * data.videos.length)];
             
-            // ၁။ ရှိသမျှ ဗီဒီယို Size တွေကို အသေးဆုံးကနေ အကြီးဆုံးကို စီလိုက်ပါမယ် (RAM မစားအောင်လို့ပါ)
+            // ၁။ အသေးဆုံးကနေ အကြီးဆုံးကို စီမယ်
             const sortedFiles = randomVideo.video_files.sort((a, b) => (a.width * a.height) - (b.width * b.height));
             
-            // ၂။ SD (Standard Definition) ကို အရင်ရှာမယ်။ မရှိခဲ့ရင်တောင် စီထားတဲ့အထဲက အသေးဆုံး (sortedFiles[0]) ကိုပဲ ယူပါမယ်
-            const videoFile = sortedFiles.find(f => f.quality === 'sd') || sortedFiles[0];
+            // ၂။ ရွှေအလယ်အလတ် (480p ကနေ 720p ကြား) ကို အရင်ရှာမယ်
+            let videoFile = sortedFiles.find(f => f.height >= 700 && f.height <= 1300);
+            
+            // ၃။ အကယ်၍ အဲဒီကြားထဲမှာ မရှိခဲ့ရင်...
+            if (!videoFile) {
+                // 1080p (Height 1920) ထက် ငယ်တဲ့အထဲက အကြီးဆုံး/အကြည်ဆုံးကို ယူမယ်
+                const smallerThanHD = sortedFiles.filter(f => f.height < 1900);
+                if (smallerThanHD.length > 0) {
+                    videoFile = smallerThanHD[smallerThanHD.length - 1]; 
+                } else {
+                    // အကုန်လုံးက 1080p တွေ 4K တွေချည်းပဲဆိုရင်တော့ ဆာဗာမကျအောင် အသေးဆုံးကိုပဲ ယူမယ်
+                    videoFile = sortedFiles[0];
+                }
+            }
             
             console.log(`Found video link: ${videoFile.link} (Size: ${videoFile.width}x${videoFile.height})`);
             return videoFile.link;
