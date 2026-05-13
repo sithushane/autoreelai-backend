@@ -12,8 +12,8 @@ export async function renderReel(audioPath, scenes, musicPath, outputPath) {
         scenes.forEach((scene, index) => {
             command.input(scene.videoPath);
             const duration = scene.end - scene.start;
-            // Crop to 9:16 (1080x1920) and force framerate/SAR
-            filterChain += `[${inputCount}:v]scale=-1:1920,crop=1080:1920,setsar=1,fps=30,trim=duration=${duration},setpts=PTS-STARTPTS[v${index}];`;
+            // RAM သက်သာအောင် 1080p အစား 720p (720x1280) နဲ့ fps=24 ကို ပြောင်းထားပါတယ်
+            filterChain += `[${inputCount}:v]scale=-1:1280,crop=720:1280,setsar=1,fps=24,format=yuv420p,trim=duration=${duration},setpts=PTS-STARTPTS[v${index}];`;
             inputCount++;
         });
 
@@ -33,12 +33,11 @@ export async function renderReel(audioPath, scenes, musicPath, outputPath) {
         filterChain += `[${musicIdx}:a]volume=0.2[bgm];[${voiceIdx}:a][bgm]amix=inputs=2:duration=first:dropout_transition=2[audioOut];`;
 
         // 3. Burn Subtitles (TikTok Style)
-        // Generate a temporary .srt file from scenes
         const srtPath = path.join(process.cwd(), 'renders', `temp_${Date.now()}.srt`);
         generateSRT(scenes, srtPath);
         
-        // Add subtitle filter with bold yellow text and black outline
-        filterChain += `[baseV]subtitles=${srtPath}:force_style='Fontname=Arial,Fontsize=24,PrimaryColour=&H0000FFFF,OutlineColour=&H00000000,BorderStyle=1,Outline=2,Alignment=2,MarginV=30'[finalV]`;
+        // Subtitle size adjusted for 720p (Fontsize ကို 24 ကနေ 18 သို့လျှော့ထားသည်)
+        filterChain += `[baseV]subtitles=${srtPath}:force_style='Fontname=Arial,Fontsize=18,PrimaryColour=&H0000FFFF,OutlineColour=&H00000000,BorderStyle=1,Outline=2,Alignment=2,MarginV=20'[finalV]`;
 
         command
             .complexFilter(filterChain)
@@ -46,10 +45,11 @@ export async function renderReel(audioPath, scenes, musicPath, outputPath) {
                 '-map [finalV]',
                 '-map [audioOut]',
                 '-c:v libx264',
-                '-preset fast',
-                '-crf 23',
+                '-preset ultrafast', // RAM သုံးစွဲမှု အနည်းဆုံးဖြစ်အောင် ultrafast ကို ပြောင်းထားပါတယ်
+                '-crf 28',           // Quality နည်းနည်းလျှော့ပြီး Size သေးအောင်
                 '-c:a aac',
                 '-b:a 128k',
+                '-threads 2',        // Render စက် Crash မဖြစ်အောင် CPU Thread ကို ၂ ခုပဲ သုံးခိုင်းထားပါတယ်
                 '-shortest'
             ])
             .output(outputPath)
