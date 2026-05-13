@@ -8,35 +8,32 @@ export async function renderReel(audioPath, scenes, musicPath, outputPath) {
         let filterChain = '';
         let inputCount = 0;
 
-        // 1. Add Stock Video Inputs & Build Filter
         scenes.forEach((scene, index) => {
             command.input(scene.videoPath);
             const duration = scene.end - scene.start;
-            // RAM လုံးဝမစားအောင် 480p (480x854) ကို ပြောင်းထားပါတယ်
+            // ဗီဒီယိုတွေကို အတင်းဆက်တဲ့အခါ Hang မဖြစ်အောင် setpts နဲ့ fps ကို သေချာပြန်ညှိထားပါတယ်
             filterChain += `[${inputCount}:v]scale=-1:854,crop=480:854,setsar=1,fps=24,format=yuv420p,trim=duration=${duration},setpts=PTS-STARTPTS[v${index}];`;
             inputCount++;
         });
 
-        // Concat all video segments
         const concatInputs = scenes.map((_, i) => `[v${i}]`).join('');
         filterChain += `${concatInputs}concat=n=${scenes.length}:v=1:a=0[baseV];`;
 
-        // 2. Audio mixing (Voice + Ducked BGM)
-        command.input(audioPath); // Input [inputCount]
+        command.input(audioPath); 
         const voiceIdx = inputCount;
         inputCount++;
         
-        command.input(musicPath); // Input [inputCount]
+        command.input(musicPath); 
         const musicIdx = inputCount;
         
         filterChain += `[${musicIdx}:a]volume=0.2[bgm];[${voiceIdx}:a][bgm]amix=inputs=2:duration=first:dropout_transition=2[audioOut];`;
 
-        // 3. Burn Subtitles
         const srtPath = path.join(process.cwd(), 'renders', `temp_${Date.now()}.srt`);
         generateSRT(scenes, srtPath);
         
-        // 480p နဲ့ ကိုက်ညီအောင် စာလုံးအရွယ်အစား (Fontsize) ကို 16 သို့ လျှော့ထားပါတယ်
         filterChain += `[baseV]subtitles=${srtPath}:force_style='Fontname=Arial,Fontsize=16,PrimaryColour=&H0000FFFF,OutlineColour=&H00000000,BorderStyle=1,Outline=2,Alignment=2,MarginV=15'[finalV]`;
+
+        console.log("Starting FFmpeg execution...");
 
         command
             .complexFilter(filterChain)
@@ -45,18 +42,30 @@ export async function renderReel(audioPath, scenes, musicPath, outputPath) {
                 '-map [audioOut]',
                 '-c:v libx264',
                 '-preset ultrafast', 
-                '-crf 30',           // Size အသေးဆုံးဖြစ်အောင်
+                '-crf 30',           
                 '-c:a aac',
                 '-b:a 128k',
-                '-threads 1',        // RAM မလောက်လို့ CPU Thread ကို (၁) ခုတည်း အသေချခိုင်းထားပါတယ်
+                '-threads 1',        
                 '-shortest'
             ])
             .output(outputPath)
+            .on('start', (commandLine) => {
+                // FFmpeg စတင်ကြောင်းနဲ့ နောက်ကွယ်က သုံးသွားတဲ့ Command ကို Log မှာ ပြပေးပါမယ်
+                console.log('FFmpeg Process Started successfully.');
+            })
+            .on('progress', (progress) => {
+                // ဗီဒီယို ဘယ်လောက်ပြီးနေပြီလဲ ဆိုတာကို အချိန်နဲ့တပြေးညီ ပြပေးပါမယ်
+                console.log(`Processing: ${progress.timemark} done...`);
+            })
             .on('end', () => {
+                console.log("FFmpeg Render Complete!");
                 fs.unlinkSync(srtPath);
                 resolve(outputPath);
             })
-            .on('error', reject)
+            .on('error', (err) => {
+                console.error("FFmpeg Fatal Error:", err.message);
+                reject(err);
+            })
             .run();
     });
 }
