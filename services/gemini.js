@@ -9,6 +9,7 @@ export async function analyzeTranscript(transcriptData) {
     3. Never use generic keywords like "people walking" or "nature background"
     4. Each scene keyword must be DIFFERENT from other scenes
     5. Keywords must be in English, max 3 words
+    6. "text" field must be English translation of what is being spoken at that moment
     
     Return a strictly formatted JSON object matching this schema:
     {
@@ -17,7 +18,7 @@ export async function analyzeTranscript(transcriptData) {
         {
           "start": 0.0,
           "end": 5.0,
-          "text": "Exact text spoken in this scene",
+          "text": "English translation of what is being spoken at this moment",
           "search_keyword": "Specific visual keyword matching the spoken content"
         }
       ]
@@ -55,7 +56,6 @@ export async function analyzeTranscript(transcriptData) {
         const content = data.choices[0].message.content;
         const parsed = JSON.parse(content);
         
-        // ✅ Log လုပ်ပြီး keyword တွေ စစ်ကြည့်မယ်
         console.log("AI Scenes:", JSON.stringify(parsed.scenes.map(s => ({
             text: s.text,
             keyword: s.search_keyword
