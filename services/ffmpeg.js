@@ -18,7 +18,7 @@ export async function renderReel(audioPath, scenes, musicPath, outputPath) {
             scenes[i].localVideoPath = localVidPath;
         }
         
-        console.log("Step 4.2: Starting FFmpeg with captions...");
+        console.log("Step 4.2: Starting FFmpeg...");
 
         return new Promise((resolve, reject) => {
             let command = ffmpeg();
@@ -35,28 +35,9 @@ export async function renderReel(audioPath, scenes, musicPath, outputPath) {
 
             // 2. Concat Videos
             const concatInputs = scenes.map((_, i) => `[v${i}]`).join('');
-            filterChain += `${concatInputs}concat=n=${scenes.length}:v=1:a=0[concatV]`;
+            filterChain += `${concatInputs}concat=n=${scenes.length}:v=1:a=0[baseV]`;
 
-            // 3. ✅ Dynamic Captions
-            const drawtextFilters = scenes.map((scene) => {
-                const safeText = scene.text
-                    .replace(/\\/g, '\\\\')
-                    .replace(/'/g, '\u2019')
-                    .replace(/:/g, '\\:')
-                    .replace(/,/g, '\\,')
-                    .replace(/\[/g, '\\[')
-                    .replace(/\]/g, '\\]');
-
-                const startTime = scene.start.toFixed(2);
-                const endTime = scene.end.toFixed(2);
-
-                return `drawtext=text='${safeText}':fontsize=36:fontcolor=white:bordercolor=black:borderw=4:x=(w-text_w)/2:y=h*0.82:box=1:boxcolor=black@0.5:boxborderw=8:enable='between(t,${startTime},${endTime})'`;
-            });
-
-            // ✅ [concatV] ကို input၊ [captionV] ကို output အနေနဲ့ ချိတ်တယ်
-            filterChain += `;[concatV]${drawtextFilters.join(',')}[captionV]`;
-
-            // 4. Audio Inputs
+            // 3. Audio Inputs
             command.input(audioPath);
             const voiceIdx = inputCount;
             inputCount++;
@@ -64,13 +45,13 @@ export async function renderReel(audioPath, scenes, musicPath, outputPath) {
             command.input(localMusicPath);
             const musicIdx = inputCount;
             
-            // 5. Audio Filters
+            // 4. Audio Filters
             filterChain += `;[${musicIdx}:a]volume=0.2[bgm];[${voiceIdx}:a][bgm]amix=inputs=2:duration=first:dropout_transition=2[audioOut]`;
 
             command
                 .complexFilter(filterChain)
                 .outputOptions([
-                    '-map [captionV]',
+                    '-map [baseV]',
                     '-map [audioOut]',
                     '-c:v libx264',
                     '-preset veryfast',
