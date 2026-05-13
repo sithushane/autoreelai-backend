@@ -1,7 +1,14 @@
 export async function analyzeTranscript(transcriptData) {
     const prompt = `
     You are an expert viral TikTok reel director. 
-    Analyze this transcript: ${JSON.stringify(transcriptData)}
+    Analyze this transcript and create perfectly timed scenes: ${JSON.stringify(transcriptData)}
+    
+    CRITICAL RULES:
+    1. "search_keyword" must DIRECTLY match what is being talked about in that scene
+    2. Keywords must be specific and visual (e.g., if talking about money → "cash money", if talking about phone → "smartphone screen")
+    3. Never use generic keywords like "people walking" or "nature background"
+    4. Each scene keyword must be DIFFERENT from other scenes
+    5. Keywords must be in English, max 3 words
     
     Return a strictly formatted JSON object matching this schema:
     {
@@ -10,12 +17,18 @@ export async function analyzeTranscript(transcriptData) {
         {
           "start": 0.0,
           "end": 5.0,
-          "text": "Exact text spoken",
-          "search_keyword": "Short 2-word keyword for Pexels (e.g., 'robot laptop')"
+          "text": "Exact text spoken in this scene",
+          "search_keyword": "Specific visual keyword matching the spoken content"
         }
       ]
     }
-    Make sure scenes align with natural sentence breaks. Optimize keywords for visually striking B-roll.
+    
+    Example:
+    - Text: "I made $10,000 last month" → search_keyword: "counting money cash"
+    - Text: "Using this simple app" → search_keyword: "mobile app screen"
+    - Text: "Working from home" → search_keyword: "laptop home office"
+    
+    Make sure scenes align with natural sentence breaks.
     `;
 
     try {
@@ -29,7 +42,7 @@ export async function analyzeTranscript(transcriptData) {
                 "model": "google/gemini-2.5-flash", 
                 "messages": [{ "role": "user", "content": prompt }],
                 "response_format": { "type": "json_object" },
-                "max_tokens": 8000 // <--- ဒီမှာ ၈၀၀၀ လို့ ပြင်ပေးလိုက်ပါပြီ
+                "max_tokens": 8000
             })
         });
 
@@ -40,7 +53,15 @@ export async function analyzeTranscript(transcriptData) {
         }
 
         const content = data.choices[0].message.content;
-        return JSON.parse(content);
+        const parsed = JSON.parse(content);
+        
+        // ✅ Log လုပ်ပြီး keyword တွေ စစ်ကြည့်မယ်
+        console.log("AI Scenes:", JSON.stringify(parsed.scenes.map(s => ({
+            text: s.text,
+            keyword: s.search_keyword
+        })), null, 2));
+        
+        return parsed;
         
     } catch (error) {
         console.error("AI Generation Error:", error);
