@@ -37,28 +37,27 @@ export async function renderReel(audioPath, scenes, musicPath, outputPath) {
             const concatInputs = scenes.map((_, i) => `[v${i}]`).join('');
             filterChain += `${concatInputs}concat=n=${scenes.length}:v=1:a=0[concatV]`;
 
-            // 3. Dynamic Captions (scene တစ်ခုချင်းစီအတွက်)
-            let captionFilter = '[concatV]';
-            scenes.forEach((scene, index) => {
-                const startTime = scene.start;
-                const endTime = scene.end;
-                
-                // Special characters တွေ escape လုပ်မယ်
+            // 3. ✅ Dynamic Captions - TikTok style
+            // Scene တစ်ခုချင်းစီအတွက် drawtext တွေ ပေါင်းထည့်မယ်
+            const drawtextFilters = scenes.map((scene, index) => {
+                // Special characters escape လုပ်မယ်
                 const safeText = scene.text
-                    .replace(/'/g, "\u2019")
-                    .replace(/:/g, "\\:")
-                    .replace(/,/g, "\\,");
+                    .replace(/\\/g, '\\\\')
+                    .replace(/'/g, '\u2019')
+                    .replace(/:/g, '\\:')
+                    .replace(/,/g, '\\,')
+                    .replace(/\[/g, '\\[')
+                    .replace(/\]/g, '\\]');
 
-                const isLast = index === scenes.length - 1;
-                const outLabel = isLast ? '[captionV]' : `[cap${index}]`;
-                const inLabel = index === 0 ? '' : `[cap${index - 1}]`;
+                const startTime = scene.start.toFixed(2);
+                const endTime = scene.end.toFixed(2);
 
-                captionFilter += `${index > 0 ? inLabel : ''}drawtext=text='${safeText}':fontsize=28:fontcolor=white:bordercolor=black:borderw=3:x=(w-text_w)/2:y=h-100:enable='between(t,${startTime},${endTime})'${isLast ? outLabel : outLabel}`;
-                
-                if (!isLast) captionFilter += ',';
+                // ✅ TikTok style - အောက်ခြေမှာ၊ background box ပါ၊ font ကြီး
+                return `drawtext=text='${safeText}':fontsize=36:fontcolor=white:bordercolor=black:borderw=4:x=(w-text_w)/2:y=h*0.82:box=1:boxcolor=black@0.5:boxborderw=8:enable='between(t,${startTime},${endTime})'`;
             });
 
-            filterChain += `;${captionFilter}`;
+            // drawtext တွေကို comma နဲ့ ချိတ်ပြီး [concatV] နောက်မှာ ထည့်မယ်
+            filterChain += `,${drawtextFilters.join(',')}[captionV]`;
 
             // 4. Audio Inputs
             command.input(audioPath);
@@ -87,9 +86,7 @@ export async function renderReel(audioPath, scenes, musicPath, outputPath) {
                     '-pix_fmt yuv420p',
                 ])
                 .output(outputPath)
-                .on('start', (cmd) => {
-                    console.log("FFmpeg Started.");
-                })
+                .on('start', () => console.log("FFmpeg Started."))
                 .on('stderr', (line) => {
                     if (line.includes('Error') || line.includes('Failed') || line.includes('Invalid')) {
                         console.log("FFmpeg:", line);
