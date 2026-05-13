@@ -14,69 +14,88 @@ import { fetchMusic } from './services/jamendo.js';
 import { renderReel } from './services/ffmpeg.js';
 
 const app = express();
-app.use(cors());
+
+// CORS ကို အသေချာဆုံးဖြစ်အောင် configuration ထည့်ပေးထားပါတယ်
+app.use(cors({
+    origin: '*',
+    methods: ['GET', 'POST'],
+    allowedHeaders: ['Content-Type']
+}));
 app.use(express.json());
 
-// အမြဲတမ်း Absolute Path ကို သုံးဖို့ သတ်မှတ်ပါတယ်
-const UPLOADS_DIR = path.join(__dirname, 'uploads');
-const RENDERS_DIR = path.join(__dirname, 'renders');
+// Render မှာ လမ်းကြောင်းတွေ မလွဲအောင် process.cwd() ကို သုံးတာ အကောင်းဆုံးပါ
+const RENDERS_DIR = path.join(process.cwd(), 'renders');
+const UPLOADS_DIR = path.join(process.cwd(), 'uploads');
 
-const dirs = [UPLOADS_DIR, RENDERS_DIR];
-dirs.forEach(dir => {
-    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+// Folder များ မရှိလျှင် အလိုအလျောက် ဆောက်ပေးခြင်း
+[RENDERS_DIR, UPLOADS_DIR].forEach(dir => {
+    if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir, { recursive: true });
+        console.log(`Created directory: ${dir}`);
+    }
 });
+
+// ✅ static folder ကို route တွေရဲ့ အပေါ်မှာ တိတိကျကျ ကြေညာပေးရပါတယ်
+app.use('/renders', express.static(RENDERS_DIR));
 
 const upload = multer({ dest: 'uploads/' });
 
-// Render က static ဖိုင်တွေကို အပြင်က လှမ်းကြည့်လို့ရအောင် ဖွင့်ပေးခြင်း
-app.use('/renders', express.static(RENDERS_DIR));
-
 app.post('/api/generate', upload.single('audio'), async (req, res) => {
-    let audioPath = null;
+    let currentAudioPath = null;
     try {
         if (!req.file) return res.status(400).json({ error: 'No audio file uploaded' });
         
         const userScript = req.body.script;
         if (!userScript) return res.status(400).json({ error: 'No script provided' });
 
-        audioPath = req.file.path;
+        currentAudioPath = req.file.path;
         const outputFilename = `reel_${Date.now()}.mp4`;
         const outputPath = path.join(RENDERS_DIR, outputFilename);
 
-        console.log('Step 1: Using provided script...');
-
-        console.log('Step 2: AI Planning...');
+        console.log('--- Step 1: Script Received ---');
+        console.log('--- Step 2: Planning with Gemini ---');
         const aiPlan = await analyzeTranscript(userScript);
 
-        console.log('Step 3: Fetching Assets...');
+        console.log('--- Step 3: Fetching Video & Music Assets ---');
         const scenesWithVideo = await Promise.all(aiPlan.scenes.map(async scene => {
             const videoPath = await fetchStockVideo(scene.search_keyword);
             return { ...scene, videoPath };
         }));
         const musicPath = await fetchMusic(aiPlan.global_mood);
 
-        console.log('Step 4: Rendering Video...');
-        // ffmpeg.js က ပြန်ပေးတဲ့ ဖိုင်နာမည်ကို ယူပါမယ်
-        const finalFile = await renderReel(audioPath, scenesWithVideo, musicPath, outputPath);
+        console.log('--- Step 4: Starting FFmpeg Rendering ---');
+        // ffmpeg.js ထဲမှာ resolves(path.basename(outputPath)) လုပ်ထားတာ သေချာပါစေ
+        const finalFile = await renderReel(currentAudioPath, scenesWithVideo, musicPath, outputPath);
 
-        // Rendering ပြီးသွားရင် မူရင်း Upload တင်ထားတဲ့ Audio ကို ဖျက်ပစ်ပါမယ် (RAM/Disk ချွေတာရေး)
-        if (fs.existsSync(audioPath)) fs.unlinkSync(audioPath);
+        // Rendering ပြီးလျှင် မူရင်း Audio ကို ဖျက်ထုတ်ပြီး RAM/Space ချွေတာပါမယ်
+        if (fs.existsSync(currentAudioPath)) fs.unlinkSync(currentAudioPath);
 
-        // အောင်မြင်ကြောင်း ပြန်ပို့ပေးပါမယ်
+        console.log(`Successfully generated: ${finalFile}`);
+
+        // အောင်မြင်ကြောင်း ပြန်ပို့မည့် Data
         res.json({ 
             success: true, 
-            videoUrl: finalFile, // ဖိုင်နာမည်ပဲ ပို့လိုက်ပါမယ်
+            videoUrl: finalFile,
             fullPath: `${req.protocol}://${req.get('host')}/renders/${finalFile}`
         });
 
     } catch (error) {
-        console.error('Pipeline Error:', error);
-        // Error တက်ရင်လည်း audio ဖိုင်ရှိရင် ဖျက်ပေးပါမယ်
-        if (audioPath && fs.existsSync(audioPath)) fs.unlinkSync(audioPath);
-        res.status(500).json({ success: false, error: 'Pipeline failed', details: error.message });
+        console.error('CRITICAL PIPELINE ERROR:', error);
+        if (currentAudioPath && fs.existsSync(currentAudioPath)) fs.unlinkSync(currentAudioPath);
+        
+        res.status(500).json({ 
+            success: false, 
+            error: 'Server process crashed or memory limit exceeded', 
+            details: error.message 
+        });
     }
 });
 
-const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => console.log(`AutoReel AI Engine running on port ${PORT}`));
+const PORT = process.env.PORT || 10000;
+app.listen(PORT, () => {
+    console.log(`========================================`);
+    console.log(`🚀 AutoReel AI Engine running on port ${PORT}`);
+    console.log(`📁 Renders folder: ${RENDERS_DIR}`);
+    console.log(`========================================`);
+});
 
