@@ -16,27 +16,26 @@ export async function fetchStockVideo(keyword) {
         const data = await response.json();
 
         if (data.videos && data.videos.length > 0) {
-            const randomVideo = data.videos[Math.floor(Math.random() * data.videos.length)];
+            // ✅ Random မယူတော့ဘဲ ပထမဆုံး result ကိုပဲ ယူတယ်
+            const bestVideo = data.videos[0];
             
             // ၁။ အသေးဆုံးကနေ အကြီးဆုံးကို စီမယ်
-            const sortedFiles = randomVideo.video_files.sort((a, b) => (a.width * a.height) - (b.width * b.height));
+            const sortedFiles = bestVideo.video_files.sort((a, b) => (a.width * a.height) - (b.width * b.height));
             
             // ၂။ ရွှေအလယ်အလတ် (480p ကနေ 720p ကြား) ကို အရင်ရှာမယ်
             let videoFile = sortedFiles.find(f => f.height >= 700 && f.height <= 1300);
             
             // ၃။ အကယ်၍ အဲဒီကြားထဲမှာ မရှိခဲ့ရင်...
             if (!videoFile) {
-                // 1080p (Height 1920) ထက် ငယ်တဲ့အထဲက အကြီးဆုံး/အကြည်ဆုံးကို ယူမယ်
                 const smallerThanHD = sortedFiles.filter(f => f.height < 1900);
                 if (smallerThanHD.length > 0) {
                     videoFile = smallerThanHD[smallerThanHD.length - 1]; 
                 } else {
-                    // အကုန်လုံးက 1080p တွေ 4K တွေချည်းပဲဆိုရင်တော့ ဆာဗာမကျအောင် အသေးဆုံးကိုပဲ ယူမယ်
                     videoFile = sortedFiles[0];
                 }
             }
             
-            console.log(`Found video link: ${videoFile.link} (Size: ${videoFile.width}x${videoFile.height})`);
+            console.log(`Found video: ${videoFile.link} (Size: ${videoFile.width}x${videoFile.height})`);
             return videoFile.link;
         } else {
             console.log(`No video found for "${keyword}". Using fallback video.`);
@@ -48,4 +47,3 @@ export async function fetchStockVideo(keyword) {
         return "https://www.w3schools.com/html/mov_bbb.mp4";
     }
 }
-
