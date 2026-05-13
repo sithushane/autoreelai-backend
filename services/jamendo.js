@@ -1,5 +1,8 @@
 export async function fetchMusic(mood) {
-    console.log(`Searching music for mood: ${mood}`);
-    // လောလောဆယ် အစမ်း music url တစ်ခုပဲ ပြန်ပေးထားပါမယ်
-    return "https://www.bensound.com/bensound-music/bensound-ukulele.mp3";
+    console.log(`Requested mood: ${mood}, but using reliable fallback music to avoid 403 Forbidden.`);
+    
+    // Bensound က Server တွေကို ပိတ်ထားလို့၊ အမြဲတမ်း 100% အလုပ်လုပ်တဲ့ 
+    // SoundHelix ရဲ့ Royalty-Free Music လင့်ခ်ကို ပြောင်းသုံးထားပါတယ်
+    return "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3";
 }
+
