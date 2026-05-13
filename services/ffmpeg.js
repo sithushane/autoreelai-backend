@@ -25,16 +25,15 @@ export async function renderReel(audioPath, scenes, musicPath, outputPath) {
             let filterChain = '';
             let inputCount = 0;
 
-            // 1. Video Filters (Newline အကုန်ဖြုတ်ထားပါတယ်)
+            // 1. Video Filters
             scenes.forEach((scene, index) => {
                 command.input(scene.localVideoPath);
                 const duration = scene.end - scene.start;
-                // အနောက်ဆုံးမှာ ; ပါပြီးသားမို့လို့ နောက်တစ်ကြောင်းနဲ့ ဆက်လို့ရပါတယ်
                 filterChain += `[${inputCount}:v]scale=480:854:force_original_aspect_ratio=increase,crop=480:854,setsar=1,fps=24,format=yuv420p,trim=duration=${duration},setpts=PTS-STARTPTS[v${index}];`;
                 inputCount++;
             });
 
-            // 2. Concat Videos (အနောက်မှာ ; မပါပါဘူး)
+            // 2. Concat Videos
             const concatInputs = scenes.map((_, i) => `[v${i}]`).join('');
             filterChain += `${concatInputs}concat=n=${scenes.length}:v=1:a=0[baseV]`;
 
@@ -46,15 +45,8 @@ export async function renderReel(audioPath, scenes, musicPath, outputPath) {
             command.input(localMusicPath); 
             const musicIdx = inputCount;
             
-            // 4. Audio Filters (အပေါ်က [baseV] နောက်ကနေ ဆက်မှာမို့လို့ ; နဲ့ စထားပါတယ်၊ အဆုံးမှာ ; မပါပါဘူး)
+            // 4. Audio Filters
             filterChain += `;[${musicIdx}:a]volume=0.2[bgm];[${voiceIdx}:a][bgm]amix=inputs=2:duration=first:dropout_transition=2[audioOut]`;
-
-            // Subtitle အဆင့်ကို လောလောဆယ် ဖြုတ်ထားပါတယ်
-
-            // Filter Chain ကြီးကို အတိအကျ မြင်ရအောင် Log ထုတ်ပါမယ်
-            console.log("================ FILTER CHAIN ==================");
-            console.log(filterChain);
-            console.log("=================================================");
 
             command
                 .complexFilter(filterChain)
@@ -71,7 +63,6 @@ export async function renderReel(audioPath, scenes, musicPath, outputPath) {
                 ])
                 .output(outputPath)
                 .on('start', (cmd) => {
-                    // အစ်ကိုပြောတဲ့အတိုင်း FFmpeg Command အတိအကျကို Log ထုတ်ပါမယ်
                     console.log("FFmpeg CMD:", cmd);
                     console.log('FFmpeg Process Started successfully.');
                 })
@@ -82,9 +73,15 @@ export async function renderReel(audioPath, scenes, musicPath, outputPath) {
                 })
                 .on('progress', (progress) => console.log(`Processing: ${progress.timemark} done...`))
                 .on('end', () => {
-                    console.log("FFmpeg Render Complete!");
+                    console.log("=================================================");
+                    console.log("✅ FFmpeg Render Complete!");
+                    // ဒီစာကြောင်းက အရေးကြီးပါတယ် - Render Log မှာ Video နာမည်ကို မြင်ရအောင်ပါ
+                    console.log("📁 Video saved at:", path.basename(outputPath)); 
+                    console.log("=================================================");
+                    
                     safeCleanup([localMusicPath, ...scenes.map(s => s.localVideoPath)]);
-                    resolve(outputPath);
+                    // ဖိုင်နာမည်ကိုပဲ resolve လုပ်ပြီး ပြန်ပို့ပေးပါမယ်
+                    resolve(path.basename(outputPath)); 
                 })
                 .on('error', (err) => {
                     console.error("FFmpeg Fatal Error:", err.message);
