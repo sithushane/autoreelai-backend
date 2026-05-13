@@ -5,7 +5,7 @@ import { Readable } from 'stream';
 import { finished } from 'stream/promises';
 
 export async function renderReel(audioPath, scenes, musicPath, outputPath) {
-    console.log("Step 4.1: Downloading assets using Memory-Safe Streams...");
+    console.log("Step 4.1: Downloading assets...");
     
     try {
         const localMusicPath = path.join(process.cwd(), 'renders', `bgm_${Date.now()}.mp3`);
@@ -18,7 +18,7 @@ export async function renderReel(audioPath, scenes, musicPath, outputPath) {
             scenes[i].localVideoPath = localVidPath;
         }
         
-        console.log("Step 4.2: All assets downloaded safely. Starting FFmpeg...");
+        console.log("Step 4.2: Starting FFmpeg with captions...");
 
         return new Promise((resolve, reject) => {
             let command = ffmpeg();
@@ -35,75 +35,93 @@ export async function renderReel(audioPath, scenes, musicPath, outputPath) {
 
             // 2. Concat Videos
             const concatInputs = scenes.map((_, i) => `[v${i}]`).join('');
-            filterChain += `${concatInputs}concat=n=${scenes.length}:v=1:a=0[baseV]`;
+            filterChain += `${concatInputs}concat=n=${scenes.length}:v=1:a=0[concatV]`;
 
-            // 3. Audio Inputs
-            command.input(audioPath); 
+            // 3. Dynamic Captions (scene တစ်ခုချင်းစီအတွက်)
+            let captionFilter = '[concatV]';
+            scenes.forEach((scene, index) => {
+                const startTime = scene.start;
+                const endTime = scene.end;
+                
+                // Special characters တွေ escape လုပ်မယ်
+                const safeText = scene.text
+                    .replace(/'/g, "\u2019")
+                    .replace(/:/g, "\\:")
+                    .replace(/,/g, "\\,");
+
+                const isLast = index === scenes.length - 1;
+                const outLabel = isLast ? '[captionV]' : `[cap${index}]`;
+                const inLabel = index === 0 ? '' : `[cap${index - 1}]`;
+
+                captionFilter += `${index > 0 ? inLabel : ''}drawtext=text='${safeText}':fontsize=28:fontcolor=white:bordercolor=black:borderw=3:x=(w-text_w)/2:y=h-100:enable='between(t,${startTime},${endTime})'${isLast ? outLabel : outLabel}`;
+                
+                if (!isLast) captionFilter += ',';
+            });
+
+            filterChain += `;${captionFilter}`;
+
+            // 4. Audio Inputs
+            command.input(audioPath);
             const voiceIdx = inputCount;
             inputCount++;
             
-            command.input(localMusicPath); 
+            command.input(localMusicPath);
             const musicIdx = inputCount;
             
-            // 4. Audio Filters
+            // 5. Audio Filters
             filterChain += `;[${musicIdx}:a]volume=0.2[bgm];[${voiceIdx}:a][bgm]amix=inputs=2:duration=first:dropout_transition=2[audioOut]`;
 
             command
                 .complexFilter(filterChain)
                 .outputOptions([
-                    '-map [baseV]',
+                    '-map [captionV]',
                     '-map [audioOut]',
                     '-c:v libx264',
-                    '-preset veryfast', 
-                    '-crf 32',          
+                    '-preset veryfast',
+                    '-crf 32',
                     '-c:a aac',
                     '-b:a 128k',
-                    '-threads 1',        
+                    '-threads 1',
                     '-shortest',
-                    '-movflags +faststart',  // ✅ browser streaming အတွက်
-                    '-pix_fmt yuv420p',      // ✅ browser compatibility အတွက်
+                    '-movflags +faststart',
+                    '-pix_fmt yuv420p',
                 ])
                 .output(outputPath)
                 .on('start', (cmd) => {
-                    console.log("FFmpeg CMD:", cmd);
-                    console.log('FFmpeg Process Started successfully.');
+                    console.log("FFmpeg Started.");
                 })
                 .on('stderr', (line) => {
-                    if(line.includes('Error') || line.includes('Failed') || line.includes('Invalid')) {
-                        console.log("FFmpeg Output:", line);
+                    if (line.includes('Error') || line.includes('Failed') || line.includes('Invalid')) {
+                        console.log("FFmpeg:", line);
                     }
                 })
-                .on('progress', (progress) => console.log(`Processing: ${progress.timemark} done...`))
+                .on('progress', (progress) => console.log(`Processing: ${progress.timemark}`))
                 .on('end', () => {
-                    console.log("=================================================");
                     console.log("✅ FFmpeg Render Complete!");
-                    console.log("📁 Video saved at:", path.basename(outputPath)); 
-                    console.log("=================================================");
-                    
+                    console.log("📁 Video:", path.basename(outputPath));
                     safeCleanup([localMusicPath, ...scenes.map(s => s.localVideoPath)]);
-                    resolve(path.basename(outputPath)); 
+                    resolve(path.basename(outputPath));
                 })
                 .on('error', (err) => {
-                    console.error("FFmpeg Fatal Error:", err.message);
+                    console.error("FFmpeg Error:", err.message);
                     safeCleanup([localMusicPath, ...scenes.map(s => s.localVideoPath)]);
                     reject(err);
                 })
                 .run();
         });
     } catch (error) {
-        console.error("Error during download or FFmpeg processing:", error);
+        console.error("Error:", error);
         throw error;
     }
 }
 
 async function downloadFileSafe(url, destPath) {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 60000); 
+    const timeout = setTimeout(() => controller.abort(), 60000);
 
     try {
         const res = await fetch(url, { signal: controller.signal });
         if (!res.ok) throw new Error(`HTTP ${res.status}: Failed to fetch ${url}`);
-        
         const fileStream = fs.createWriteStream(destPath);
         await finished(Readable.fromWeb(res.body).pipe(fileStream));
     } finally {
@@ -117,7 +135,7 @@ function safeCleanup(filePaths) {
             try {
                 fs.unlinkSync(filePath);
             } catch (err) {
-                console.error(`Failed to delete file ${filePath}:`, err.message);
+                console.error(`Failed to delete: ${filePath}`, err.message);
             }
         }
     });
