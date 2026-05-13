@@ -59,7 +59,9 @@ export async function renderReel(audioPath, scenes, musicPath, outputPath) {
                     '-c:a aac',
                     '-b:a 128k',
                     '-threads 1',        
-                    '-shortest'
+                    '-shortest',
+                    '-movflags +faststart',  // ✅ browser streaming အတွက်
+                    '-pix_fmt yuv420p',      // ✅ browser compatibility အတွက်
                 ])
                 .output(outputPath)
                 .on('start', (cmd) => {
@@ -75,12 +77,10 @@ export async function renderReel(audioPath, scenes, musicPath, outputPath) {
                 .on('end', () => {
                     console.log("=================================================");
                     console.log("✅ FFmpeg Render Complete!");
-                    // ဒီစာကြောင်းက အရေးကြီးပါတယ် - Render Log မှာ Video နာမည်ကို မြင်ရအောင်ပါ
                     console.log("📁 Video saved at:", path.basename(outputPath)); 
                     console.log("=================================================");
                     
                     safeCleanup([localMusicPath, ...scenes.map(s => s.localVideoPath)]);
-                    // ဖိုင်နာမည်ကိုပဲ resolve လုပ်ပြီး ပြန်ပို့ပေးပါမယ်
                     resolve(path.basename(outputPath)); 
                 })
                 .on('error', (err) => {
@@ -122,4 +122,3 @@ function safeCleanup(filePaths) {
         }
     });
 }
-
