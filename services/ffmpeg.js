@@ -18,18 +18,18 @@ export async function renderReel(audioPath, scenes, musicPath, outputPath) {
             scenes[i].localVideoPath = localVidPath;
         }
         
-        console.log("Step 4.2: Starting FFmpeg...");
+        console.log("Step 4.2: Starting FFmpeg 1080P...");
 
         return new Promise((resolve, reject) => {
             let command = ffmpeg();
             let filterChain = '';
             let inputCount = 0;
 
-            // 1. Video Filters - ✅ trim နဲ့ setpts ကို scale/crop အရင် ထားတယ်
+            // 1. Video Filters - ✅ 1080P (1080x1920)
             scenes.forEach((scene, index) => {
                 command.input(scene.localVideoPath);
                 const duration = scene.end - scene.start;
-                filterChain += `[${inputCount}:v]trim=duration=${duration},setpts=PTS-STARTPTS,scale=480:854:force_original_aspect_ratio=increase,crop=480:854,setsar=1,fps=24,format=yuv420p[v${index}];`;
+                filterChain += `[${inputCount}:v]trim=duration=${duration},setpts=PTS-STARTPTS,scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,setsar=1,fps=30,format=yuv420p[v${index}];`;
                 inputCount++;
             });
 
@@ -54,12 +54,10 @@ export async function renderReel(audioPath, scenes, musicPath, outputPath) {
                     '-map [baseV]',
                     '-map [audioOut]',
                     '-c:v libx264',
-                    '-preset veryfast',
-                    '-crf 32',
+                    '-preset fast',      // ✅ veryfast → fast (quality ပိုကောင်းတယ်)
+                    '-crf 23',           // ✅ 32 → 23 (1080P quality)
                     '-c:a aac',
-                    '-b:a 128k',
-                    '-threads 1',
-                    '-shortest',
+                    '-b:a 192k',         // ✅ 128k → 192k
                     '-movflags +faststart',
                     '-pix_fmt yuv420p',
                 ])
