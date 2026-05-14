@@ -25,11 +25,11 @@ export async function renderReel(audioPath, scenes, musicPath, outputPath) {
             let filterChain = '';
             let inputCount = 0;
 
-            // 1. Video Filters
+            // 1. Video Filters - ✅ trim နဲ့ setpts ကို scale/crop အရင် ထားတယ်
             scenes.forEach((scene, index) => {
                 command.input(scene.localVideoPath);
                 const duration = scene.end - scene.start;
-                filterChain += `[${inputCount}:v]scale=480:854:force_original_aspect_ratio=increase,crop=480:854,setsar=1,fps=24,format=yuv420p,trim=duration=${duration},setpts=PTS-STARTPTS[v${index}];`;
+                filterChain += `[${inputCount}:v]trim=duration=${duration},setpts=PTS-STARTPTS,scale=480:854:force_original_aspect_ratio=increase,crop=480:854,setsar=1,fps=24,format=yuv420p[v${index}];`;
                 inputCount++;
             });
 
