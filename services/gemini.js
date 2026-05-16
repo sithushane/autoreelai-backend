@@ -21,29 +21,19 @@ VIDEO STYLE:
 CONTENT RULES:
 1. Divide the video into 4 to 6 scenes.
 2. Each scene MUST feel like a real short-form video edit.
-3. Voiceover MUST be Burmese language.
-4. Voiceover MUST be short and emotionally engaging.
-5. Each scene voiceover should be 1-2 sentences maximum.
-6. Total voiceover length should fit within 60 seconds.
-7. text_on_screen MUST be short and punchy.
-8. visual_idea MUST be in English.
-9. search_keyword MUST be generic stock-video-friendly keywords.
-10. NEVER use specific universities, brands, organizations, or person names in search_keyword.
-11. search_keyword MUST be maximum 3 words.
-12. shot_type MUST be one of:
-   - drone
-   - closeup
-   - wide
-   - portrait
-   - cinematic
-   - tracking
-13. editing_style MUST be one of:
-   - fast_zoom
-   - cinematic
-   - energetic
-   - glitch
-   - smooth_pan
-   - dramatic
+3. Voiceover MUST be in PURE Burmese text. 
+4. CRITICAL: NEVER mix English words, acronyms, digits, or symbols (e.g., NO "100%", NO "fully funded", NO "IELTS", NO "%").
+5. Everything MUST be spelled out completely in Burmese words (e.g., write "တစ်ရာရာခိုင်နှုန်း" instead of "100%", "အပြည့်အဝပံ့ပိုးမှု" instead of "fully funded", "အိုင်အီးအယ်လ်တီအက်စ်" instead of "IELTS"). This is MANDATORY to prevent font rendering bugs (square boxes).
+6. Each scene voiceover should be 1-2 sentences maximum.
+7. Total voiceover length should fit within 60 seconds.
+8. text_on_screen MUST be short, punchy, and written in PURE Burmese text only. No English characters, numbers, or symbols.
+9. visual_idea MUST be in English.
+10. search_keyword MUST contain ONLY ONE short generic stock-video-friendly keyword phrase.
+11. NEVER use commas, lists, or multiple keywords separated by symbols (e.g., NO "graduation, English test").
+12. search_keyword MUST be maximum 2 words (e.g., "university campus", "study laptop").
+13. NEVER use specific universities, brands, organizations, or person names in search_keyword.
+14. shot_type MUST be one of: drone, closeup, wide, portrait, cinematic, tracking
+15. editing_style MUST be one of: fast_zoom, cinematic, energetic, glitch, smooth_pan, dramatic
 
 RETURN JSON SCHEMA:
 {
@@ -106,14 +96,12 @@ The content must feel highly engaging, emotional, cinematic, and optimized for s
                         type: "json_object"
                     },
 
-                    // 🌟 AI ရဲ့ Format ကို ပိုမိုတည်ငြိမ်စေရန် Temperature ကို 0.7 သို့ ပြောင်းထားပါသည်
                     temperature: 0.7,
                     max_tokens: 8000
                 })
             }
         );
 
-        // HTTP Error Check
         if (!response.ok) {
             const errText = await response.text();
             throw new Error(`HTTP ${response.status}: ${errText}`);
@@ -121,12 +109,10 @@ The content must feel highly engaging, emotional, cinematic, and optimized for s
 
         const data = await response.json();
 
-        // OpenRouter Error Check
         if (data.error) {
             throw new Error(`OpenRouter Error: ${data.error.message}`);
         }
 
-        // AI Response Content
         const content = data?.choices?.[0]?.message?.content;
 
         if (!content) {
@@ -135,7 +121,6 @@ The content must feel highly engaging, emotional, cinematic, and optimized for s
 
         let parsed;
 
-        // Safe JSON Parsing
         try {
             parsed = JSON.parse(content);
         } catch (jsonError) {
@@ -144,12 +129,11 @@ The content must feel highly engaging, emotional, cinematic, and optimized for s
             throw new Error("AI returned malformed JSON.");
         }
 
-        // Basic Validation
         if (!parsed.scenes || !Array.isArray(parsed.scenes)) {
             throw new Error("Invalid AI schema: scenes missing.");
         }
 
-        // 🌟 Scene Validation (Duration ကို ဖြုတ်ချထားပါသည်)
+        // Scene Validation 
         parsed.scenes = parsed.scenes.map((scene, index) => {
             return {
                 part: scene.part || `PART ${index + 1}`,
@@ -162,7 +146,7 @@ The content must feel highly engaging, emotional, cinematic, and optimized for s
             };
         });
 
-        // Terminal Debug Output
+        // Terminal Debug Output (လှပသေသပ်သော အချောထွက် Log)
         console.log("\n🎬 SCRIPT GENERATED SUCCESSFULLY\n");
         console.log("TITLE:", parsed.title);
         console.log("GLOBAL MOOD:", parsed.global_mood);
@@ -204,4 +188,3 @@ ${scene.editing_style}
         throw error;
     }
 }
-
