@@ -86,18 +86,18 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             const concatInputs = scenes.map((_, i) => `[v${i}][${vCount + i}:a]`).join('');
             filterChain += `${concatInputs}concat=n=${vCount}:v=1:a=1[baseV][baseA];`;
 
+            // 🌟 ၃.၅ - Subtitle Burn-in ကို Relative Path ဖြင့် complexFilter ထဲတွင် တစ်ခါတည်းလုပ်ဆောင်ခြင်း
+            const relativeSubPath = path.relative(process.cwd(), assPath).replace(/\\/g, '/');
+            filterChain += `[baseV]subtitles=filename='${relativeSubPath}'[finalV];`;
+
             // 4. Audio Mixing
             filterChain += `[${musicIdx}:a]volume=0.15[bgm];[baseA][bgm]amix=inputs=2:duration=first:dropout_transition=2[audioOut]`;
-
-            // ✅ 5. ASS subtitle path escape လုပ်မယ်
-            const safeAssPath = assPath.replace(/\\/g, '/').replace(/:/g, '\\:');
 
             command
                 .complexFilter(filterChain)
                 .outputOptions([
-                    '-map [baseV]',
+                    '-map [finalV]',    // 🌟 [baseV] အစား စာတန်းထိုးပြီးသား [finalV] ကို ပြောင်းမြေပုံဆွဲခြင်း
                     '-map [audioOut]',
-                    `-vf`, `ass=${safeAssPath}`,  // ✅ Myanmar subtitle burn-in
                     '-c:v libx264',
                     '-preset fast',
                     '-crf 23',
@@ -177,3 +177,4 @@ function safeCleanup(filePaths) {
         }
     });
 }
+
