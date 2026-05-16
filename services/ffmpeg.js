@@ -48,17 +48,20 @@ export async function renderReel(scenes, musicPath, outputPath) {
             command.input(localMusicPath);
             const musicIdx = vCount * 2;
 
-            // 🌟 2. Video Filters (Trimming, Letterboxing & Local Font Text Overlays)
+            // 🌟 2. Video Filters (Trimming, Letterboxing & Local Absolute Font Text Overlays)
             scenes.forEach((scene, index) => {
                 const duration = scene.duration; 
                 const text = scene.text_on_screen ? scene.text_on_screen.replace(/[:']/g, '') : '';
                 
-                // 📐 Fix: ဗီဒီယိုများ ဘေးစွန်းဖြတ်မခံရစေရန် scale/pad သုံး၍ Letterbox/Pillarbox ပြုလုပ်ခြင်း
+                // 📐 Letterbox/Pillarbox System: ဗီဒီယိုများ မပြဲသွားဘဲ 1080x1920 ထဲသို့ အချိုးကျဝင်ပြီး ဘေးအမည်းရောင်နောက်ခံ (Pad) ခံခြင်း
                 let videoFilter = `[${index}:v]trim=duration=${duration},setpts=PTS-STARTPTS,scale=1080:1920:force_original_aspect_ratio=decrease,pad=1080:1920:(ow-iw)/2:(oh-ih)/2:black,fps=30,format=yuv420p`;
 
                 if (text) {
-                    // 🇲🇲 Fix: Termux တွင်းရှိ Local Font လမ်းကြောင်းသို့ ပြောင်းလဲခြင်းနှင့် စာတန်းထိုး Layout အား အောက်ခြေနားသို့ နေရာချခြင်း
-                    videoFilter += `,drawtext=fontfile=fonts/NotoSansMyanmar-Regular.ttf:text='${text}':fontsize=65:fontcolor=white:box=1:boxcolor=black@0.7:boxborderw=15:x=(w-text_w)/2:y=h-(h*0.15)`;
+                    // 🇲🇲 Absolute Path System: Termux ပတ်ဝန်းကျင်အလိုက် လမ်းကြောင်းမလွဲစေရန် လမ်းကြောင်းအပြည့်ကို တိုက်ရိုက်ဆွဲယူခြင်း
+                    const absoluteFontPath = path.join(process.cwd(), 'fonts', 'NotoSansMyanmar-Regular.ttf');
+                    
+                    // စာတန်းထိုး Style ကို TikTok စတိုင်အတိုင်း အောက်ခြေနား (Y=ကျန်ရှိသည့်အမြင့်၏ ၈၅%) တွင် စနစ်တကျနေရာချခြင်း
+                    videoFilter += `,drawtext=fontfile='${absoluteFontPath}':text='${text}':fontsize=65:fontcolor=white:box=1:boxcolor=black@0.7:boxborderw=15:x=(w-text_w)/2:y=h-(h*0.15)`;
                 }
 
                 filterChain += `${videoFilter}[v${index}];`;
