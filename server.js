@@ -1,47 +1,27 @@
 import express from 'express';
 import cors from 'cors';
-import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
-// ✅ အသစ်ထပ်ထည့်ထားသော ffmpeg (Audio အရှည်တိုင်းရန်အတွက်)
-import ffmpeg from 'fluent-ffmpeg';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-import { analyzeTranscript } from './services/gemini.js';
+// 🌟 Services အသစ်များကို လှမ်းခေါ်ခြင်း
+import { generateVideoScript } from './services/gemini.js';
+import { generateAudioForScenes } from './services/tts.js';
 import { fetchStockVideo } from './services/pexels.js';
 import { fetchMusic } from './services/jamendo.js';
 import { renderReel } from './services/ffmpeg.js';
 
 const app = express();
 app.use(cors());
-app.use(express.json());
+app.use(express.json()); // JSON data ကို တိုက်ရိုက်လက်ခံမည်
 
 const RENDERS_DIR = path.join(process.cwd(), 'renders');
-const UPLOADS_DIR = path.join(process.cwd(), 'uploads');
-
 if (!fs.existsSync(RENDERS_DIR)) fs.mkdirSync(RENDERS_DIR, { recursive: true });
-if (!fs.existsSync(UPLOADS_DIR)) fs.mkdirSync(UPLOADS_DIR, { recursive: true });
-
-const upload = multer({ dest: 'uploads/' });
 
 const jobs = new Map();
-
-// 🌟 Audio ကြာချိန်ကို အတိအကျ တိုင်းတာပေးမည့် Helper Function (အသစ်)
-const getAudioDuration = (filePath) => {
-    return new Promise((resolve, reject) => {
-        ffmpeg.ffprobe(filePath, (err, metadata) => {
-            if (err) {
-                console.error("ffprobe Error:", err);
-                reject(err);
-            } else {
-                resolve(metadata.format.duration);
-            }
-        });
-    });
-};
 
 app.get('/renders/:filename', (req, res) => {
     const filePath = path.join(RENDERS_DIR, req.params.filename);
@@ -52,51 +32,56 @@ app.get('/renders/:filename', (req, res) => {
     }
 });
 
-app.post('/api/generate', upload.single('audio'), async (req, res) => {
-    if (!req.file) return res.status(400).json({ error: 'No audio file uploaded' });
-    if (!req.body.script) return res.status(400).json({ error: 'No script provided' });
+// 🌟 API Endpoint အသစ် (Audio upload မလိုတော့ပါ၊ Text (topic) သီးသန့် လက်ခံမည်)
+app.post('/api/generate', async (req, res) => {
+    const topic = req.body.topic || req.body.script; 
+    if (!topic) return res.status(400).json({ error: 'No topic provided! Please send a topic.' });
 
     const jobId = `job_${Date.now()}`;
-    const audioPath = req.file.path;
-
     jobs.set(jobId, { status: 'processing' });
+    
+    // Frontend ကို Job ID ချက်ချင်း ပြန်ပို့ပေးမယ် (Timeout မဖြစ်အောင်)
     res.json({ jobId });
 
     try {
         const outputFilename = `reel_${Date.now()}.mp4`;
         const outputPath = path.join(RENDERS_DIR, outputFilename);
 
-        console.log(`[${jobId}] Processing started...`);
+        console.log(`\n[${jobId}] 🚀 AutoReel Production Started!`);
+        console.log(`[${jobId}] 📝 Topic: "${topic}"`);
 
-        // 🌟 အဆင့် (၁) - Audio ဖိုင်ရဲ့ စုစုပေါင်း ကြာချိန်ကို အရင်တိုင်းမယ်
-        const totalDuration = await getAudioDuration(audioPath);
-        console.log(`[${jobId}] 🎵 Audio Duration detected: ${totalDuration} seconds`);
-
-        // 🌟 အဆင့် (၂) - AI ဆီကို script ရော၊ duration ပါ ပို့ပေးလိုက်မယ်
-        const aiPlan = await analyzeTranscript(req.body.script, totalDuration);
+        // 🌟 အဆင့် (၁) - AI ဆီကနေ Script နဲ့ Scene Plan ကို တောင်းမယ်
+        console.log(`[${jobId}] Step 1: Generating Script from Gemini...`);
+        const aiPlan = await generateVideoScript(topic);
         
-        // အဆင့် (၃) - Pexels ကနေ ဗီဒီယိုတွေ လှမ်းရှာမယ်
-        const scenesWithVideo = await Promise.all(aiPlan.scenes.map(async scene => {
-            const videoPath = await fetchStockVideo(scene.search_keyword);
+        // 🌟 အဆင့် (၂) - Scene တစ်ခုချင်းစီအတွက် အသံဖိုင်လေးတွေ ထုတ်မယ် (TTS)
+        console.log(`[${jobId}] Step 2: Generating TTS Audio...`);
+        const scenesWithAudio = await generateAudioForScenes(aiPlan.scenes);
+        
+        // 🌟 အဆင့် (၃) - Pexels ကနေ ဗီဒီယိုတွေ လှမ်းရှာမယ်
+        console.log(`[${jobId}] Step 3: Fetching Stock Videos...`);
+        const scenesWithVideo = await Promise.all(scenesWithAudio.map(async scene => {
+            // Text သက်သက် Scene တွေအတွက် Video မလိုရင် ကျော်သွားဖို့ logic လေးပါ
+            if (!scene.keyword) return scene; 
+            const videoPath = await fetchStockVideo(scene.keyword);
             return { ...scene, videoPath };
         }));
         
-        // အဆင့် (၄) - နောက်ခံတေးဂီတ ရှာမယ်
+        // 🌟 အဆင့် (၄) - နောက်ခံတေးဂီတ ရှာမယ်
+        console.log(`[${jobId}] Step 4: Fetching BGM...`);
         const musicPath = await fetchMusic(aiPlan.global_mood);
         
-        // အဆင့် (၅) - အားလုံးပေါင်းပြီး Video ထုတ်မယ်
-        await renderReel(audioPath, scenesWithVideo, musicPath, outputPath);
-
-        // အလုပ်ပြီးရင် ယာယီအသံဖိုင်ကို ဖျက်မယ်
-        if (fs.existsSync(audioPath)) fs.unlinkSync(audioPath);
+        // 🌟 အဆင့် (၅) - အားလုံးပေါင်းပြီး Video ထုတ်မယ် (FFmpeg)
+        console.log(`[${jobId}] Step 5: Rendering Final Video with Text Overlays...`);
+        // audioPath သီးသန့် မပို့တော့ဘဲ scenes ကိုပဲ ပို့လိုက်ပါပြီ
+        await renderReel(scenesWithVideo, musicPath, outputPath);
 
         const videoUrl = `${process.env.BASE_URL}/renders/${outputFilename}`;
         jobs.set(jobId, { status: 'done', videoUrl });
-        console.log(`[${jobId}] ✅ Done: ${videoUrl}`);
+        console.log(`[${jobId}] ✅ Masterpiece Done: ${videoUrl}\n`);
 
     } catch (err) {
         console.error(`[${jobId}] ❌ Error:`, err.message);
-        if (fs.existsSync(audioPath)) fs.unlinkSync(audioPath);
         jobs.set(jobId, { status: 'error', error: err.message });
     }
 });
@@ -109,7 +94,7 @@ app.get('/api/status/:jobId', (req, res) => {
 
 const PORT = process.env.PORT || 10000;
 app.listen(PORT, () => {
-    console.log(`🚀 AutoReel AI Engine running on port ${PORT}`);
+    console.log(`🚀 AutoReel AI Production Studio running on port ${PORT}`);
     console.log(`📁 Renders folder: ${RENDERS_DIR}`);
 });
 
