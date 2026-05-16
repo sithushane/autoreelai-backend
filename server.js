@@ -1,3 +1,4 @@
+
 import express from 'express';
 import cors from 'cors';
 import path from 'path';
@@ -58,12 +59,16 @@ app.post('/api/generate', async (req, res) => {
         console.log(`[${jobId}] Step 2: Generating TTS Audio...`);
         const scenesWithAudio = await generateAudioForScenes(aiPlan.scenes);
         
-        // 🌟 အဆင့် (၃) - Pexels ကနေ ဗီဒီယိုတွေ လှမ်းရှာမယ်
+        // 🌟 အဆင့် (၃) - Pexels ကနေ ဗီဒီယိုတွေ လှမ်းရှာမယ် (Fix: search_keyword ညှိခြင်းနှင့် global_mood ထည့်သွင်းခြင်း)
         console.log(`[${jobId}] Step 3: Fetching Stock Videos...`);
+        const globalMood = aiPlan.global_mood || "cinematic"; // AI ဆီမှ global mood အား ရယူခြင်း
+
         const scenesWithVideo = await Promise.all(scenesWithAudio.map(async scene => {
-            // Text သက်သက် Scene တွေအတွက် Video မလိုရင် ကျော်သွားဖို့ logic လေးပါ
-            if (!scene.keyword) return scene; 
-            const videoPath = await fetchStockVideo(scene.keyword);
+            // gemini.js schema နှင့် ကိုက်ညီစေရန် search_keyword သို့ ပြောင်းလဲစစ်ဆေးခြင်း
+            if (!scene.search_keyword) return scene; 
+            
+            // pexels.js စနစ်သစ်ဆီသို့ keyword နှင့် mood အား တွဲဖက်ပေးပို့ခြင်း
+            const videoPath = await fetchStockVideo(scene.search_keyword, globalMood);
             return { ...scene, videoPath };
         }));
         
@@ -97,4 +102,3 @@ app.listen(PORT, () => {
     console.log(`🚀 AutoReel AI Production Studio running on port ${PORT}`);
     console.log(`📁 Renders folder: ${RENDERS_DIR}`);
 });
-
