@@ -5,7 +5,7 @@ import { Readable } from 'stream';
 import { finished } from 'stream/promises';
 
 export async function renderReel(scenes, musicPath, outputPath) {
-    console.log("Step 4.1: Downloading video assets...");
+    console.log("Step 4.1: Checking and preparing hybrid media assets...");
     
     try {
         const localMusicPath = path.join(process.cwd(), 'renders', `bgm_${Date.now()}.mp3`);
@@ -13,24 +13,29 @@ export async function renderReel(scenes, musicPath, outputPath) {
 
         for (let i = 0; i < scenes.length; i++) {
             if (!scenes[i] || !scenes[i].videoPath) {
-                console.log(`⚠️ Warning: Missing video URL for Scene ${i + 1}`);
-                if (i > 0 && scenes[i - 1].localVideoPath) {
+                console.log(`⚠️ Warning: Missing media URL for Scene ${i + 1}`);
+                if (i > 0 && scenes[i - 1].videoPath) {
                     scenes[i].videoPath = scenes[i - 1].videoPath;
                 } else {
                     scenes[i].videoPath = "https://assets.mixkit.co/videos/preview/mixkit-abstract-laser-lights-background-23246-large.mp4";
                 }
             }
 
-            console.log(`Downloading video ${i + 1} of ${scenes.length}...`);
-            const localVidPath = path.join(process.cwd(), 'renders', `vid_${Date.now()}_${i}.mp4`);
-            await downloadFileSafe(scenes[i].videoPath, localVidPath);
-            scenes[i].localVideoPath = localVidPath;
+            // 🌟 လင့်ခ်မှာ ဖိုင်အမျိုးအစား ဘာလဲဆိုတာ စစ်ဆေးခြင်း (.jpg, .png စသဖြင့်)
+            const isPhoto = /\.(jpg|jpeg|png|webp)/i.test(scenes[i].videoPath);
+            const ext = isPhoto ? '.jpg' : '.mp4';
+
+            console.log(`Downloading asset ${i + 1} of ${scenes.length} (${isPhoto ? 'Photo' : 'Video'})...`);
+            const localAssetPath = path.join(process.cwd(), 'renders', `asset_${Date.now()}_${i}${ext}`);
+            await downloadFileSafe(scenes[i].videoPath, localAssetPath);
+            
+            scenes[i].localVideoPath = localAssetPath;
+            scenes[i].isPhoto = isPhoto; // FFmpeg Filter အတွက် သိမ်းထားခြင်း
         }
 
         // ✅ ASS Subtitle File ဆောက်မယ်
         const assPath = path.join(process.cwd(), 'renders', `sub_${Date.now()}.ass`);
         
-        // ✅ ASS Header
         let assContent = `[Script Info]
 ScriptType: v4.00+
 PlayResX: 1080
@@ -45,7 +50,6 @@ Style: Default,Noto Sans Myanmar,65,&H00FFFFFF,&H000000FF,&H00000000,&H80000000,
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 `;
 
-        // ✅ Scene တစ်ခုချင်းစီအတွက် subtitle line ထည့်မယ်
         let currentTime = 0;
         scenes.forEach((scene) => {
             const duration = scene.duration;
@@ -59,34 +63,44 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             currentTime = end;
         });
 
-        // ✅ ASS file သိမ်းမယ်
         fs.writeFileSync(assPath, assContent, 'utf8');
         console.log("✅ ASS Subtitle file created:", assPath);
 
-        console.log("Step 4.2: Starting FFmpeg Cinematic Render (1080P + Myanmar Subtitles)...");
+        console.log("Step 4.2: Starting FFmpeg Cinematic Render (1080P Hybrid + Myanmar Subtitles)...");
 
         return new Promise((resolve, reject) => {
             let command = ffmpeg();
             let filterChain = '';
             const vCount = scenes.length;
 
-            // 1. Input တွေ ထည့်မယ်
+            // 1. Input တွေ ထည့်မယ် (ဓာတ်ပုံ သို့မဟုတ် ဗီဒီယို)
             scenes.forEach(scene => command.input(scene.localVideoPath));
             scenes.forEach(scene => command.input(scene.audioPath));
             command.input(localMusicPath);
             const musicIdx = vCount * 2;
 
-            // 2. Video Filters
+            // 2. Video & Photo Hybrid Filters
             scenes.forEach((scene, index) => {
                 const duration = scene.duration;
-                filterChain += `[${index}:v]trim=duration=${duration},setpts=PTS-STARTPTS,scale=1080:1920:force_original_aspect_ratio=decrease,pad=1080:1920:(ow-iw)/2:(oh-ih)/2:black,fps=30,format=yuv420p[v${index}];`;
+                
+                let baseInputFilter = `[${index}:v]`;
+                
+                // 🌟 CRITICAL: တကယ်လို့ ဖိုင်က ဓာတ်ပုံဖြစ်နေရင် ပုံသေမဖြစ်စေဘဲ အသံကြာချိန်အတိုင်း Loop လုပ်ပြီး ဗီဒီယိုအဖြစ် ပြောင်းလဲခြင်း
+                if (scene.isPhoto) {
+                    baseInputFilter = `[${index}:v]loop=loop=-1:size=1:start=0,tpad=stop_mode=clone:stop_duration=${duration},trim=duration=${duration},setpts=PTS-STARTPTS`;
+                } else {
+                    baseInputFilter = `[${index}:v]trim=duration=${duration},setpts=PTS-STARTPTS`;
+                }
+
+                // Pillarbox/Letterbox အချိုးကျစနစ်ကို ပုံရော၊ ဗီဒီယိုပါ တန်းစီကျွေးခြင်း
+                filterChain += `${baseInputFilter},scale=1080:1920:force_original_aspect_ratio=decrease,pad=1080:1920:(ow-iw)/2:(oh-ih)/2:black,fps=30,format=yuv420p[v${index}];`;
             });
 
             // 3. Concat Videos + Audios
             const concatInputs = scenes.map((_, i) => `[v${i}][${vCount + i}:a]`).join('');
             filterChain += `${concatInputs}concat=n=${vCount}:v=1:a=1[baseV][baseA];`;
 
-            // 🌟 ၃.၅ - Subtitle Burn-in ကို Relative Path ဖြင့် complexFilter ထဲတွင် တစ်ခါတည်းလုပ်ဆောင်ခြင်း
+            // ၃.၅ - Subtitle Burn-in ကို Relative Path ဖြင့် ဆွဲခြင်း
             const relativeSubPath = path.relative(process.cwd(), assPath).replace(/\\/g, '/');
             filterChain += `[baseV]subtitles=filename='${relativeSubPath}'[finalV];`;
 
@@ -96,7 +110,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             command
                 .complexFilter(filterChain)
                 .outputOptions([
-                    '-map [finalV]',    // 🌟 [baseV] အစား စာတန်းထိုးပြီးသား [finalV] ကို ပြောင်းမြေပုံဆွဲခြင်း
+                    '-map [finalV]',
                     '-map [audioOut]',
                     '-c:v libx264',
                     '-preset fast',
@@ -143,7 +157,6 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
     }
 }
 
-// ✅ ASS Time Format: H:MM:SS.CC
 function toASSTime(seconds) {
     const h = Math.floor(seconds / 3600);
     const m = Math.floor((seconds % 3600) / 60);
