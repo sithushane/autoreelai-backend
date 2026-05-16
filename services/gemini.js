@@ -28,9 +28,19 @@ CONTENT RULES:
 7. Total voiceover length should fit within 60 seconds.
 8. text_on_screen MUST be short, punchy, and written in PURE Burmese text only. No English characters, numbers, or symbols.
 9. visual_idea MUST be in English.
-10. search_keyword MUST contain ONLY ONE short generic stock-video-friendly keyword phrase.
-11. NEVER use commas, lists, or multiple keywords separated by symbols (e.g., NO "graduation, English test").
-12. search_keyword MUST be maximum 2 words (e.g., "university campus", "study laptop").
+10. search_keyword MUST directly match what is visually happening in that scene.
+    - If voiceover talks about studying → "student reading book"
+    - If talking about headache → "person holding head pain"
+    - If talking about drinking water → "person drinking water"
+    - If talking about hospital → "doctor patient clinic"
+    - If talking about graduation → "graduation ceremony stage"
+    - Think: "what would a cameraman film for this exact scene?"
+11. search_keyword MUST be specific and visual - NEVER use abstract words alone like "hope", "future", "journey".
+    - BAD: "hope future" ❌
+    - GOOD: "hopeful student walking" ✅
+    - BAD: "journey" ❌
+    - GOOD: "person traveling road" ✅
+12. search_keyword MUST be maximum 3 words.
 13. NEVER use specific universities, brands, organizations, or person names in search_keyword.
 14. shot_type MUST be one of: drone, closeup, wide, portrait, cinematic, tracking
 15. editing_style MUST be one of: fast_zoom, cinematic, energetic, glitch, smooth_pan, dramatic
@@ -47,7 +57,7 @@ RETURN JSON SCHEMA:
       "voiceover": "Burmese narration",
       "text_on_screen": "Short Burmese text",
       "visual_idea": "English visual idea",
-      "search_keyword": "generic keyword",
+      "search_keyword": "specific visual keyword",
       "shot_type": "drone",
       "editing_style": "fast_zoom"
     }
@@ -140,13 +150,13 @@ The content must feel highly engaging, emotional, cinematic, and optimized for s
                 voiceover: scene.voiceover || "",
                 text_on_screen: scene.text_on_screen || "",
                 visual_idea: scene.visual_idea || "Cinematic footage",
-                search_keyword: scene.search_keyword || "cinematic video",
+                search_keyword: scene.search_keyword || "person walking outdoor",
                 shot_type: scene.shot_type || "cinematic",
                 editing_style: scene.editing_style || "cinematic"
             };
         });
 
-        // Terminal Debug Output (လှပသေသပ်သော အချောထွက် Log)
+        // Terminal Debug Output
         console.log("\n🎬 SCRIPT GENERATED SUCCESSFULLY\n");
         console.log("TITLE:", parsed.title);
         console.log("GLOBAL MOOD:", parsed.global_mood);
