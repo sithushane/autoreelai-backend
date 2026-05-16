@@ -1,34 +1,27 @@
 // services/gemini.js
 
-export async function analyzeTranscript(transcriptData, totalDuration) {
+export async function generateVideoScript(topicOrScript) {
     const prompt = `
-    You are an expert viral TikTok reel director. 
-    Analyze this transcript and create perfectly timed scenes: ${JSON.stringify(transcriptData)}
+    You are an expert viral TikTok/Shorts director. 
+    Create a highly engaging, structured 60-second video script about: "${topicOrScript}"
     
-    CRITICAL TIMING RULES (MUST FOLLOW STRICTLY):
-    1. The total audio duration is EXACTLY ${totalDuration} seconds.
-    2. You MUST distribute this ${totalDuration} seconds logically across all scenes based on the word count of each scene.
-    3. The first scene's "start" must be EXACTLY 0.0.
-    4. The FINAL scene's "end" MUST be EXACTLY ${totalDuration}.
-    5. There must be NO GAPS between scenes (e.g., if Scene 1 ends at 4.5, Scene 2 MUST start at 4.5).
+    CONTENT RULES (MUST FOLLOW STRICTLY):
+    1. Divide the video into 4 to 5 logical parts (e.g., Hook, Intro, Body, Benefits, Call to Action).
+    2. "voiceover": Write highly engaging, natural Burmese language narration.
+    3. "text_on_screen": Write 1 or 2 punchy short Burmese phrases to display on screen (e.g., "အခမဲ့ Master တက်မလား? 🎓"). Keep it very short.
+    4. "visual_idea": A brief description in English of what the scene should look like.
+    5. "search_keyword": English keyword (max 3 words) for fetching background video from stock sites (e.g., "Beijing city aerial", "students studying"). Must be highly relevant and specific.
 
-    VISUAL RULES:
-    1. "search_keyword" must DIRECTLY match what is being talked about in that scene.
-    2. Keywords must be specific and visual (e.g., if talking about money -> "counting cash", if talking about history -> "ancient ruin").
-    3. Never use generic keywords like "people walking" or "nature background".
-    4. Each scene keyword must be DIFFERENT from other scenes.
-    5. Keywords must be in English, max 3 words.
-    6. "text" field must be English translation of what is being spoken at that moment.
-    
-    Return a strictly formatted JSON object matching this schema:
+    Return ONLY a strictly formatted JSON object matching this schema:
     {
-      "global_mood": "cinematic|energetic|sad|mysterious|tech",
+      "global_mood": "cinematic|energetic|inspiring|tech|mysterious",
       "scenes": [
         {
-          "start": 0.0,
-          "end": 4.5,
-          "text": "English translation of what is being spoken at this moment",
-          "search_keyword": "Specific visual keyword"
+          "part": "PART 1: Hook",
+          "voiceover": "တရုတ်နိုင်ငံရဲ့ နံပါတ် (၁) ထိပ်တန်းတက္ကသိုလ်ကြီးမှာ တစ်ပြားမှမကုန်ဘဲ မာစတာဘွဲ့ တက်ရောက်ခွင့်ရမယ့် အခွင့်အရေး လာပါပြီ။",
+          "text_on_screen": "တရုတ်မှာ အခမဲ့ Master တက်မလား? 🇨🇳🎓",
+          "visual_idea": "Beautiful campus or Beijing city view",
+          "search_keyword": "Beijing city aerial"
         }
       ]
     }
@@ -44,8 +37,7 @@ export async function analyzeTranscript(transcriptData, totalDuration) {
             body: JSON.stringify({
                 "model": "google/gemini-2.5-flash", 
                 "messages": [{ "role": "user", "content": prompt }],
-                // ✅ ဒါက အစ်ကိုနဲ့ တိုင်ပင်ထားတဲ့ "သံမဏိစည်းမျဉ်း" (Native JSON Mode) ပါ
-                // AI ကို စကားပို လုံးဝ ပြောခွင့်မပေးတော့ဘဲ Code သီးသန့်ပဲ ထုတ်ပေးပါလိမ့်မယ်
+                // Native JSON Mode (စကားပိုမပြောဘဲ Code သီးသန့် ထုတ်ပေးမည့်စနစ်)
                 "response_format": { "type": "json_object" },
                 "max_tokens": 8000
             })
@@ -61,18 +53,19 @@ export async function analyzeTranscript(transcriptData, totalDuration) {
         const content = data.choices[0].message.content;
         const parsed = JSON.parse(content);
         
-        // Terminal မှာ အချိန်တွေ ဘယ်လောက် တိကျသွားလဲဆိုတာကို ရှင်းရှင်းလင်းလင်း ပြပေးမယ့် Log
-        console.log("✅ AI Scenes Generated Successfully:");
+        // Terminal မှာ ဇာတ်ညွှန်း ဘယ်လောက်လန်းလဲဆိုတာ ပြပေးမယ့် Log
+        console.log("🎬 AI Director Script Generated Successfully:");
         console.log(JSON.stringify(parsed.scenes.map(s => ({
-            text: s.text,
-            duration: `${s.start}s to ${s.end}s`,
+            part: s.part,
+            voiceover: s.voiceover,
+            text_on_screen: s.text_on_screen,
             keyword: s.search_keyword
         })), null, 2));
         
         return parsed;
         
     } catch (error) {
-        console.error("❌ AI Generation Error:", error);
+        console.error("❌ AI Script Generation Error:", error);
         throw error;
     }
 }
