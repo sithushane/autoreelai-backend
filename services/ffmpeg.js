@@ -12,19 +12,12 @@ export async function renderReel(scenes, musicPath, outputPath) {
         await downloadFileSafe(musicPath, localMusicPath);
 
         for (let i = 0; i < scenes.length; i++) {
-            // 🌟 Scene 1 အပါအဝင် ဘယ် Scene မှာမဆို Video URL မရှိရင် လုံးဝ Crash မဖြစ်စေမည့် အပြီးသတ်စနစ်
             if (!scenes[i] || !scenes[i].videoPath) {
-                console.log(`⚠️ Warning: Missing video URL for Scene ${i + 1} (Keyword: "${scenes[i]?.search_keyword}")`);
-                
-                if (i > 0 && scenes[i - 1].videoPath) {
-                    // အနောက်က Scene တွေဆိုရင် ရှေ့ Scene က ဗီဒီယိုကိုပဲ Context မပျက် ဆက်သုံးမယ်
-                    console.log(`🎬 Context Protection: Reusing video from previous scene.`);
+                console.log(`⚠️ Warning: Missing video URL for Scene ${i + 1}`);
+                if (i > 0 && scenes[i - 1].localVideoPath) {
                     scenes[i].videoPath = scenes[i - 1].videoPath;
                 } else {
-                    // အကယ်၍ Scene 1 မှာတင် API အကုန်လုံးက ဗီဒီယိုလုံးဝရှာမတွေ့ခဲ့ရင် 
-                    // ဘယ် Topic နဲ့မဆို လိုက်ဖက်သည့် လှပသော Universal Dark Abstract Video ကို သုံးမည်
-                    console.log(`🎬 Scene 1 Ultimate Protection: Using an elegant universal abstract background.`);
-                    scenes[i].videoPath = "https://assets.mixkit.co/videos/preview/mixkit-abstract-laser-lights-background-23246-large.mp4"; 
+                    scenes[i].videoPath = "https://assets.mixkit.co/videos/preview/mixkit-abstract-laser-lights-background-23246-large.mp4";
                 }
             }
 
@@ -33,62 +26,88 @@ export async function renderReel(scenes, musicPath, outputPath) {
             await downloadFileSafe(scenes[i].videoPath, localVidPath);
             scenes[i].localVideoPath = localVidPath;
         }
+
+        // ✅ ASS Subtitle File ဆောက်မယ်
+        const assPath = path.join(process.cwd(), 'renders', `sub_${Date.now()}.ass`);
         
-        console.log("Step 4.2: Starting FFmpeg Cinematic Render (1080P + Text)...");
+        // ✅ ASS Header
+        let assContent = `[Script Info]
+ScriptType: v4.00+
+PlayResX: 1080
+PlayResY: 1920
+WrapStyle: 1
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: Default,Noto Sans Myanmar,65,&H00FFFFFF,&H000000FF,&H00000000,&H80000000,0,0,0,0,100,100,0,0,1,3,0,2,10,10,80,1
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+`;
+
+        // ✅ Scene တစ်ခုချင်းစီအတွက် subtitle line ထည့်မယ်
+        let currentTime = 0;
+        scenes.forEach((scene) => {
+            const duration = scene.duration;
+            const start = currentTime;
+            const end = currentTime + duration;
+            const text = scene.text_on_screen || '';
+
+            if (text) {
+                assContent += `Dialogue: 0,${toASSTime(start)},${toASSTime(end)},Default,,0,0,0,,${text}\n`;
+            }
+            currentTime = end;
+        });
+
+        // ✅ ASS file သိမ်းမယ်
+        fs.writeFileSync(assPath, assContent, 'utf8');
+        console.log("✅ ASS Subtitle file created:", assPath);
+
+        console.log("Step 4.2: Starting FFmpeg Cinematic Render (1080P + Myanmar Subtitles)...");
 
         return new Promise((resolve, reject) => {
             let command = ffmpeg();
             let filterChain = '';
             const vCount = scenes.length;
 
-            // 🌟 1. Input များကို စနစ်တကျ တန်းစီသွင်းခြင်း
+            // 1. Input တွေ ထည့်မယ်
             scenes.forEach(scene => command.input(scene.localVideoPath));
             scenes.forEach(scene => command.input(scene.audioPath));
-            
             command.input(localMusicPath);
             const musicIdx = vCount * 2;
 
-            // 🌟 2. Video Filters (Trimming, Letterboxing & Local Absolute Font Text Overlays)
+            // 2. Video Filters
             scenes.forEach((scene, index) => {
-                const duration = scene.duration; 
-                const text = scene.text_on_screen ? scene.text_on_screen.replace(/[:']/g, '') : '';
-                
-                // 📐 Letterbox/Pillarbox System: ဗီဒီယိုများ မပြဲသွားဘဲ 1080x1920 ထဲသို့ အချိုးကျဝင်ပြီး ဘေးအမည်းရောင်နောက်ခံ (Pad) ခံခြင်း
-                let videoFilter = `[${index}:v]trim=duration=${duration},setpts=PTS-STARTPTS,scale=1080:1920:force_original_aspect_ratio=decrease,pad=1080:1920:(ow-iw)/2:(oh-ih)/2:black,fps=30,format=yuv420p`;
-
-                if (text) {
-                    // 🇲🇲 Absolute Path System: Termux ပတ်ဝန်းကျင်အလိုက် လမ်းကြောင်းမလွဲစေရန် လမ်းကြောင်းအပြည့်ကို တိုက်ရိုက်ဆွဲယူခြင်း
-                    const absoluteFontPath = path.join(process.cwd(), 'fonts', 'NotoSansMyanmar-Regular.ttf');
-                    
-                    // စာတန်းထိုး Style ကို TikTok စတိုင်အတိုင်း အောက်ခြေနား (Y=ကျန်ရှိသည့်အမြင့်၏ ၈၅%) တွင် စနစ်တကျနေရာချခြင်း
-                    videoFilter += `,drawtext=fontfile='${absoluteFontPath}':text='${text}':fontsize=65:fontcolor=white:box=1:boxcolor=black@0.7:boxborderw=15:x=(w-text_w)/2:y=h-(h*0.15)`;
-                }
-
-                filterChain += `${videoFilter}[v${index}];`;
+                const duration = scene.duration;
+                filterChain += `[${index}:v]trim=duration=${duration},setpts=PTS-STARTPTS,scale=1080:1920:force_original_aspect_ratio=decrease,pad=1080:1920:(ow-iw)/2:(oh-ih)/2:black,fps=30,format=yuv420p[v${index}];`;
             });
 
-            // 🌟 3. Concat Videos AND Audios
+            // 3. Concat Videos + Audios
             const concatInputs = scenes.map((_, i) => `[v${i}][${vCount + i}:a]`).join('');
             filterChain += `${concatInputs}concat=n=${vCount}:v=1:a=1[baseV][baseA];`;
 
-            // 🌟 4. Audio Mixing
+            // 4. Audio Mixing
             filterChain += `[${musicIdx}:a]volume=0.15[bgm];[baseA][bgm]amix=inputs=2:duration=first:dropout_transition=2[audioOut]`;
+
+            // ✅ 5. ASS subtitle path escape လုပ်မယ်
+            const safeAssPath = assPath.replace(/\\/g, '/').replace(/:/g, '\\:');
 
             command
                 .complexFilter(filterChain)
                 .outputOptions([
                     '-map [baseV]',
                     '-map [audioOut]',
+                    `-vf`, `ass=${safeAssPath}`,  // ✅ Myanmar subtitle burn-in
                     '-c:v libx264',
-                    '-preset fast',      
-                    '-crf 23',           
+                    '-preset fast',
+                    '-crf 23',
                     '-c:a aac',
-                    '-b:a 192k',         
+                    '-b:a 192k',
                     '-movflags +faststart',
                     '-pix_fmt yuv420p',
                 ])
                 .output(outputPath)
-                .on('start', () => console.log("FFmpeg Started... Adding Magic! ✨"))
+                .on('start', () => console.log("FFmpeg Started... ✨"))
                 .on('stderr', (line) => {
                     if (line.includes('Error') || line.includes('Failed') || line.includes('Invalid')) {
                         console.log("FFmpeg Warning:", line);
@@ -97,25 +116,23 @@ export async function renderReel(scenes, musicPath, outputPath) {
                 .on('progress', (progress) => console.log(`Rendering: ${progress.timemark}`))
                 .on('end', () => {
                     console.log("✅ FFmpeg Render Complete!");
-                    console.log("📁 Output Video:", path.basename(outputPath));
-                    
-                    const filesToClean = [
-                        localMusicPath, 
+                    console.log("📁 Output:", path.basename(outputPath));
+                    safeCleanup([
+                        localMusicPath,
+                        assPath,
                         ...scenes.map(s => s.localVideoPath),
                         ...scenes.map(s => s.audioPath)
-                    ];
-                    safeCleanup(filesToClean);
-                    
+                    ]);
                     resolve(path.basename(outputPath));
                 })
                 .on('error', (err) => {
                     console.error("FFmpeg Error:", err.message);
-                    const filesToClean = [
-                        localMusicPath, 
+                    safeCleanup([
+                        localMusicPath,
+                        assPath,
                         ...scenes.map(s => s.localVideoPath),
                         ...scenes.map(s => s.audioPath)
-                    ];
-                    safeCleanup(filesToClean);
+                    ]);
                     reject(err);
                 })
                 .run();
@@ -126,12 +143,19 @@ export async function renderReel(scenes, musicPath, outputPath) {
     }
 }
 
-async function downloadFileSafe(url, destPath) {
-    if (!url) throw new Error("downloadFileSafe received an empty or undefined URL.");
-    
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 60000);
+// ✅ ASS Time Format: H:MM:SS.CC
+function toASSTime(seconds) {
+    const h = Math.floor(seconds / 3600);
+    const m = Math.floor((seconds % 3600) / 60);
+    const s = Math.floor(seconds % 60);
+    const cs = Math.floor((seconds % 1) * 100);
+    return `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}.${String(cs).padStart(2, '0')}`;
+}
 
+async function downloadFileSafe(url, destPath) {
+    if (!url) throw new Error("Empty URL received.");
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 120000);
     try {
         const res = await fetch(url, { signal: controller.signal });
         if (!res.ok) throw new Error(`HTTP ${res.status}: Failed to fetch ${url}`);
@@ -153,4 +177,3 @@ function safeCleanup(filePaths) {
         }
     });
 }
-
