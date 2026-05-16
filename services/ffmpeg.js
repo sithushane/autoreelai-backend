@@ -12,7 +12,7 @@ export async function renderReel(scenes, musicPath, outputPath) {
         await downloadFileSafe(musicPath, localMusicPath);
 
         for (let i = 0; i < scenes.length; i++) {
-            // 🌟 Fix: Scene 1 အပါအဝင် ဘယ် Scene မှာမဆို Video URL မရှိရင် လုံးဝ Crash မဖြစ်စေမည့် အပြီးသတ်စနစ်
+            // 🌟 Scene 1 အပါအဝင် ဘယ် Scene မှာမဆို Video URL မရှိရင် လုံးဝ Crash မဖြစ်စေမည့် အပြီးသတ်စနစ်
             if (!scenes[i] || !scenes[i].videoPath) {
                 console.log(`⚠️ Warning: Missing video URL for Scene ${i + 1} (Keyword: "${scenes[i]?.search_keyword}")`);
                 
@@ -21,7 +21,7 @@ export async function renderReel(scenes, musicPath, outputPath) {
                     console.log(`🎬 Context Protection: Reusing video from previous scene.`);
                     scenes[i].videoPath = scenes[i - 1].videoPath;
                 } else {
-                    // အကယ်၍ Scene 1 မှာတင် API အကုန်လုံးက ဗီဒီယိုလုံးဝရှာမတွေ့ခဲ့ရင် (Hardcode မဟုတ်သော) 
+                    // အကယ်၍ Scene 1 မှာတင် API အကုန်လုံးက ဗီဒီယိုလုံးဝရှာမတွေ့ခဲ့ရင် 
                     // ဘယ် Topic နဲ့မဆို လိုက်ဖက်သည့် လှပသော Universal Dark Abstract Video ကို သုံးမည်
                     console.log(`🎬 Scene 1 Ultimate Protection: Using an elegant universal abstract background.`);
                     scenes[i].videoPath = "https://assets.mixkit.co/videos/preview/mixkit-abstract-laser-lights-background-23246-large.mp4"; 
@@ -48,17 +48,20 @@ export async function renderReel(scenes, musicPath, outputPath) {
             command.input(localMusicPath);
             const musicIdx = vCount * 2;
 
-            // 🌟 2. Video Filters (Trimming, Scaling & Text on Screen)
+            // 🌟 2. Video Filters (Trimming, Letterboxing & Local Font Text Overlays)
             scenes.forEach((scene, index) => {
                 const duration = scene.duration; 
                 const text = scene.text_on_screen ? scene.text_on_screen.replace(/[:']/g, '') : '';
                 
-                let textFilter = '';
+                // 📐 Fix: ဗီဒီယိုများ ဘေးစွန်းဖြတ်မခံရစေရန် scale/pad သုံး၍ Letterbox/Pillarbox ပြုလုပ်ခြင်း
+                let videoFilter = `[${index}:v]trim=duration=${duration},setpts=PTS-STARTPTS,scale=1080:1920:force_original_aspect_ratio=decrease,pad=1080:1920:(ow-iw)/2:(oh-ih)/2:black,fps=30,format=yuv420p`;
+
                 if (text) {
-                    textFilter = `,drawtext=fontfile=/system/fonts/NotoSansMyanmar-Regular.ttf:text='${text}':fontsize=70:fontcolor=white:box=1:boxcolor=black@0.6:boxborderw=20:x=(w-text_w)/2:y=(h-text_h)/2`;
+                    // 🇲🇲 Fix: Termux တွင်းရှိ Local Font လမ်းကြောင်းသို့ ပြောင်းလဲခြင်းနှင့် စာတန်းထိုး Layout အား အောက်ခြေနားသို့ နေရာချခြင်း
+                    videoFilter += `,drawtext=fontfile=fonts/NotoSansMyanmar-Regular.ttf:text='${text}':fontsize=65:fontcolor=white:box=1:boxcolor=black@0.7:boxborderw=15:x=(w-text_w)/2:y=h-(h*0.15)`;
                 }
 
-                filterChain += `[${index}:v]trim=duration=${duration},setpts=PTS-STARTPTS,scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,setsar=1,fps=30,format=yuv420p${textFilter}[v${index}];`;
+                filterChain += `${videoFilter}[v${index}];`;
             });
 
             // 🌟 3. Concat Videos AND Audios
@@ -147,3 +150,4 @@ function safeCleanup(filePaths) {
         }
     });
 }
+
